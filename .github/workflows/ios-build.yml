@@ -37,3 +37,16 @@ jobs:
         run: |
           cd ios/App
           xcodebuild -workspace App.xcworkspace -scheme App -sdk iphoneos -configuration Release clean build CODE_SIGNING_ALLOWED=NO
+
+      - name: Build Payload and Export IPA
+        run: |
+          cd ios/App
+          mkdir -p Payload
+          mv build/Release-iphoneos/App.app Payload/
+          zip -r DriverApp.ipa Payload
+
+      - name: Upload IPA Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: DriverApp-IPA
+          path: ios/App/DriverApp.ipa    

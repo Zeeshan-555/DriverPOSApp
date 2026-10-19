@@ -1,5 +1,10 @@
 {
   "appId": "com.company.driverpos",
   "appName": "DriverApp",
-  "webDir": "www"
+  "webDir": "www",
+  "bundledWebRuntime": false,
+  "ios": {
+    "scheme": "App",
+    "contentInset": "always"
+  }
 }
