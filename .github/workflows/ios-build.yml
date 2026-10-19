@@ -22,6 +22,11 @@ jobs:
           npx cap add ios
           npx cap sync ios
 
+      - name: Install CocoaPods
+        run: |
+          cd ios/App
+          pod install
+
       - name: Build iOS App via Xcode
         run: |
           cd ios/App
