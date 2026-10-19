@@ -5,30 +5,23 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - run: npm install
-      - name: Create Web Assets
+
+      - name: Install Dependencies
+        run: npm install
+
+      - name: Ensure Web Directory Exists
         run: mkdir -p www dist
-      - name: Clean and Add iOS Platform
+
+      - name: Re-create and Sync iOS Platform
         run: |
           rm -rf ios
           npx cap add ios
-      - name: Sync iOS and Plugins
-        run: npx cap sync ios
-      - name: Verify Podfile Exists
-        run: |
-          if [ -f "ios/App/Podfile" ]; then
-            echo "Podfile found successfully!"
-          else
-            echo "Error: Podfile not found!"
-            exit 1
-          fi
-      - name: Install CocoaPods
-        run: |
-          cd ios/App
-          pod install
+          npx cap sync ios
+
       - name: Build iOS App via Xcode
         run: |
           cd ios/App
