@@ -9,10 +9,15 @@ jobs:
         with:
           node-version: '22'
       - run: npm install
-      - run: npx cap add ios || true
-      - run: npx cap sync ios
-      - name: Build iOS App
+      - name: Ensure Web Assets Directory Exists
+        run: mkdir -p www dist
+      - name: Add iOS Platform
+        run: npx cap add ios || true
+      - name: Sync Capacitor iOS
+        run: npx cap sync ios
+      - name: Install CocoaPods
+        run: cd ios/App && pod install
+      - name: Build iOS App via Xcode
         run: |
           cd ios/App
-          pod install
           xcodebuild -workspace App.xcworkspace -scheme App -sdk iphoneos -configuration Release clean build CODE_SIGNING_ALLOWED=NO
