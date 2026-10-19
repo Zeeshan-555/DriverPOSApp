@@ -1,61 +1,264 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Driver POS Launch</title>
-  <style>
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      display: flex;
-      flex-direction: column;
-      justify-content: center;
-      align-items: center;
-      height: 100vh;
-      margin: 0;
-      background-color: #f4f6f9;
-      text-align: center;
-    }
-    .card {
-      background: #ffffff;
-      padding: 30px;
-      border-radius: 12px;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-      max-width: 80%;
-    }
-    .btn {
-      display: inline-block;
-      margin-top: 15px;
-      padding: 12px 24px;
-      background-color: #007aff;
-      color: white;
-      text-decoration: none;
-      border-radius: 8px;
-      font-weight: bold;
-    }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>POS Driver App</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #f0f2f5;
+        }
+        .card {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #007bff;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
 </head>
 <body>
 
-  <div class="card">
-    <h2>Opening Star WebPRNT...</h2>
-    <p>Agar app automatically open nahi hoti, toh neeche button par click karein:</p>
-    <a id="openBtn" href="#" class="btn">Open Star WebPRNT</a>
-  </div>
+    <div class="card">
+        <h2>POS System Connecting...</h2>
+        <div class="spinner"></div>
+        <p id="status-text">Preparing Star WebPRNT Connection...</p>
+    </div>
 
-  <script>
-    // Aapka exact Oracle APEX POS URL
-    var APP_URL = "https://g3abe3d28894d81-sf989trdzjk0jv8l.adb.uk-london-1.oraclecloudapps.com/ords/f?p=106";
+    <script>
+        // --- STAR WEB PRINT BUILDER MOCK ---
+        window.StarWebPrintBuilder = function() {
+            this.createInitializationElement = function(args) { return "<initialization/>"; };
+            this.createTextElement = function(args) { 
+                let attrs = "";
+                for (let k in args) attrs += ` ${k}="${args[k]}"`;
+                return `<text${attrs}>${args.data || ''}</text>`; 
+            };
+            this.createCutPaperElement = function(args) { return "<cutpaper type='partial'/>"; };
+        };
 
-    var SCHEME_URL = "webprnt://starmicronics.com/open?url=" + encodeURIComponent(APP_URL);
+        var papertype = "normal";
+        var builder = new StarWebPrintBuilder();
+        var request = '';
+        var PRINTER_MODE = 'escpos';
+        var PAPER_COLS = 48;
 
-    document.getElementById("openBtn").setAttribute("href", SCHEME_URL);
+        function decodeData(s) {
+            var bytes = [];
+            for (var i = 0; i < s.length; i++) {
+                var ch = s.charAt(i);
+                if (ch === '\\') {
+                    var next = s.charAt(i + 1);
+                    if (next === 'n') { bytes.push(0x0A); i++; }
+                    else if (next === 'r') { bytes.push(0x0D); i++; }
+                    else if (next === 't') { bytes.push(0x09); i++; }
+                    else if (next === 'x' && /^[0-9a-fA-F]{2}$/.test(s.substr(i + 2, 2))) {
+                        bytes.push(parseInt(s.substr(i + 2, 2), 16));
+                        i += 3;
+                    } else { bytes.push(ch.charCodeAt(0)); }
+                } else {
+                    var c = s.charCodeAt(i);
+                    bytes.push(c === 0x20AC ? 0x80 : (c < 256 ? c : 0x3F));
+                }
+            }
+            return bytes;
+        }
 
-    // App khulte hi Star WebPRNT ko trigger karein
-    setTimeout(function () {
-      window.location.href = SCHEME_URL;
-    }, 500);
-  </script>
+        function starXmlToBytes(xml) {
+            var doc = new DOMParser().parseFromString("<root>" + xml + "</root>", "text/xml");
+            if (doc.getElementsByTagName("parsererror").length) {
+                throw new Error("Generated Star XML is not well-formed.");
+            }
+            var ESC = 0x1B, GS = 0x1D, LF = 0x0A;
+            var out = [];
+            var st = { space: 0, align: 'left' };
 
+            function put() { for (var i = 0; i < arguments.length; i++) out.push(arguments[i] & 0xFF); }
+            function isTrue(v) { return v === 'true' || v === true; }
+            function setEmphasis(on) { put(ESC, 0x45, on ? 1 : 0); }
+            function setUnderline(on) { put(ESC, 0x2D, on ? 1 : 0); }
+            function setInvert(on) { put(GS, 0x42, on ? 1 : 0); }
+            function setSize(w, h) {
+                w = Math.max(1, Math.min(6, w)); h = Math.max(1, Math.min(6, h));
+                put(GS, 0x21, ((w - 1) << 4) | (h - 1));
+            }
+            function setSpace(n) { st.space = n; put(ESC, 0x20, n); }
+            function setAlign(pos) {
+                var n = (pos === 'center') ? 1 : (pos === 'right') ? 2 : 0;
+                st.align = pos;
+                put(ESC, 0x61, n);
+            }
+            function setCodepage() { put(ESC, 0x74, 16); }
+            function cut() { 
+                put(LF, LF, LF, LF, LF); 
+                put(GS, 0x56, 66, 3);
+            }
+
+            Array.prototype.forEach.call(doc.documentElement.childNodes, function (node) {
+                if (node.nodeType !== 1) return;
+                var name = node.nodeName.toLowerCase();
+                var a = function (k) { return node.getAttribute(k); };
+
+                if (name === 'initialization') {
+                    put(ESC, 0x40);
+                    put(GS, 0x4C, 0, 0);
+                    st.space = 0; st.align = 'left';
+                    setCodepage();
+                } else if (name === 'text') {
+                    if (a('codepage') !== null) setCodepage();
+                    if (a('emphasis') !== null) setEmphasis(isTrue(a('emphasis')));
+                    if (a('underline') !== null) setUnderline(isTrue(a('underline')));
+                    if (a('invert') !== null) setInvert(isTrue(a('invert')));
+                    if (a('width') !== null || a('height') !== null) {
+                        setSize(parseInt(a('width') || '1', 10), parseInt(a('height') || '1', 10));
+                    }
+                    if (a('characterspace') !== null) setSpace(parseInt(a('characterspace'), 10) || 0);
+                    var data = node.textContent;
+                    if (data) { decodeData(data).forEach(function (b) { out.push(b); }); }
+                } else if (name === 'alignment') {
+                    setAlign(a('position') || 'left');
+                } else if (name === 'ruledline') {
+                    var t = a('thickness') || 'medium';
+                    var ch = (t.indexOf('double') === 0 || t === 'thick') ? 0x3D : 0x2D;
+                    var prevAlign = st.align, prevSpace = st.space;
+                    setAlign('left'); setSpace(0);
+                    for (var i = 0; i < PAPER_COLS; i++) { out.push(ch); }
+                    out.push(LF);
+                    setSpace(prevSpace); setAlign(prevAlign);
+                } else if (name === 'feed') {
+                    var n = parseInt(a('line') || '1', 10);
+                    for (var j = 0; j < n; j++) out.push(LF);
+                } else if (name === 'cutpaper') {
+                    cut();
+                }
+            });
+            return out;
+        }
+
+        function bytesToBase64(bytes) {
+            var s = '', chunk = 0x2000;
+            for (var i = 0; i < bytes.length; i += chunk) {
+                s += String.fromCharCode.apply(null, bytes.slice(i, i + chunk));
+            }
+            return btoa(s);
+        }
+
+        window.sendToPrinter = function(xmlRequest) {
+            var allBytes = starXmlToBytes(xmlRequest);
+            
+            if (window.SlikopsDevice && typeof window.SlikopsDevice.printData === "function") {
+                var chunkSize = 512;
+                var index = 0;
+                function sendNextChunk() {
+                    if (index < allBytes.length) {
+                        var chunkBytes = allBytes.slice(index, index + chunkSize);
+                        var b64 = bytesToBase64(chunkBytes);
+                        var ok = window.SlikopsDevice.printData(b64);
+                        if (ok === false || ok === "false") {
+                            alert("Bluetooth print failed.");
+                            return;
+                        }
+                        index += chunkSize;
+                        setTimeout(sendNextChunk, 30);
+                    }
+                }
+                sendNextChunk();
+                return;
+            }
+
+            if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.SlikopsDeviceHandler) {
+                window.webkit.messageHandlers.SlikopsDeviceHandler.postMessage({
+                    action: "printBytes",
+                    data: bytesToBase64(allBytes)
+                });
+                return;
+            }
+            alert("Native Printer Bridge not detected.");
+        }
+
+        window.printReceiptFromPayload = function(rawPayload) {
+            request = '';
+            request += builder.createInitializationElement({ reset: false, print: false });
+            request += builder.createTextElement({ codepage: 'cp1252', characterspace: 0 });
+
+            if (!rawPayload || rawPayload.trim() === "") {
+                alert("No payload found!");
+                return;
+            }
+
+            try {
+                var payload = (typeof rawPayload === "string") ? JSON.parse(rawPayload) : rawPayload;
+                if (payload.status === 'ERROR') {
+                    alert("Validation Error: " + payload.message);
+                    return;
+                }
+                if (payload && payload.print_script) {
+                    eval(payload.print_script);
+                } else {
+                    alert("Invalid Payload structure.");
+                    return;
+                }
+                request += builder.createTextElement({ emphasis: false, characterspace: 0 });
+                request += builder.createCutPaperElement({ type: 'partial' });
+                window.sendToPrinter(request);
+            } catch (e) {
+                alert("Print Execution Error: " + e.message);
+            }
+        };
+
+        // --- DEVICE UUID & STAR WEBPRNT REDIRECTION SCHEME ---
+        function getOrCreateDeviceUUID() {
+            let uuid = localStorage.getItem('pos_device_uuid');
+            if (!uuid) {
+                uuid = 'DEV-' + Math.random().toString(36).substring(2, 10) + '-' + Date.now().toString(36);
+                localStorage.setItem('pos_device_uuid', uuid);
+            }
+            return uuid;
+        }
+
+        function redirectApp() {
+            try {
+                const deviceUUID = getOrCreateDeviceUUID();
+                
+                // Aapka exact APEX URL jisme Machine ID sath pass ho rahi hai
+                const apexBaseURL = "https://g3abe3d28894d81-sf989trdzjk0jv8l.adb.uk-london-1.oraclecloudapps.com/ords/f?p=106:LOGIN_DESKTOP:::NO:RP:P0_MACHINE_ID:";
+                const targetAPEXURL = apexBaseURL + encodeURIComponent(deviceUUID);
+                
+                // Star WebPRNT scheme ke through wrap kiya taaki iPad direct Star WebPRNT app mein open kare
+                const starWebPRNTScheme = "webprnt://starmicronics.com/open?url=" + encodeURIComponent(targetAPEXURL);
+
+                document.getElementById('status-text').innerText = "Launching Star WebPRNT...";
+                
+                // Star WebPRNT app par redirect trigger karein
+                setTimeout(function() {
+                    window.location.href = starWebPRNTScheme;
+                }, 400);
+
+            } catch (err) {
+                document.getElementById('status-text').innerText = "Redirect Error: " + err.message;
+            }
+        }
+
+        // Execute immediately on load
+        window.onload = function() {
+            redirectApp();
+        };
+    </script>
 </body>
 </html>
