@@ -9,16 +9,22 @@ jobs:
         with:
           node-version: '22'
       - run: npm install
-      - name: Ensure Web Assets Directory Exists
+      - name: Create Web Assets
         run: mkdir -p www dist
-      - name: Re-create iOS Platform
+      - name: Initialize Capacitor iOS
+        run: npx cap init --force || true
+      - name: Add iOS Platform Manually if Missing
         run: |
-          rm -rf ios
-          npx cap add ios
-      - name: Sync Capacitor iOS
+          npx cap add ios || true
+          ls -la ios/App || true
+      - name: Sync iOS
         run: npx cap sync ios
+      - name: List Directory for Debugging
+        run: ls -la ios/App || true
       - name: Install CocoaPods
-        run: cd ios/App && pod install
+        run: |
+          cd ios/App
+          pod install
       - name: Build iOS App via Xcode
         run: |
           cd ios/App
