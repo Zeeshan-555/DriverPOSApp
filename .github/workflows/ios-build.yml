@@ -23,10 +23,6 @@ jobs:
           rm -rf ios
           npx cap add ios --packagemanager CocoaPods
           npx cap sync ios
-          echo "---- Capacitor version ----"
-          npx cap --version
-          echo "---- ios/App contents ----"
-          ls -la ios/App
 
       - name: Install CocoaPods
         run: |
@@ -36,17 +32,17 @@ jobs:
       - name: Build iOS App via Xcode
         run: |
           cd ios/App
-          xcodebuild -workspace App.xcworkspace -scheme App -sdk iphoneos -configuration Release clean build CODE_SIGNING_ALLOWED=NO
+          xcodebuild -workspace App.xcworkspace -scheme App -sdk iphoneos -configuration Release -derivedDataPath build clean build CODE_SIGNING_ALLOWED=NO
 
       - name: Build Payload and Export IPA
         run: |
-          cd ios/App
+          cd ios/App/build/Build/Products/Release-iphoneos
           mkdir -p Payload
-          mv build/Release-iphoneos/App.app Payload/
-          zip -r DriverApp.ipa Payload
+          cp -R App.app Payload/
+          zip -r $GITHUB_WORKSPACE/DriverApp.ipa Payload
 
       - name: Upload IPA Artifact
         uses: actions/upload-artifact@v4
         with:
           name: DriverApp-IPA
-          path: ios/App/DriverApp.ipa    
+          path: DriverApp.ipa
