@@ -11,16 +11,20 @@ jobs:
       - run: npm install
       - name: Create Web Assets
         run: mkdir -p www dist
-      - name: Initialize Capacitor iOS
-        run: npx cap init --force || true
-      - name: Add iOS Platform Manually if Missing
+      - name: Clean and Add iOS Platform
         run: |
-          npx cap add ios || true
-          ls -la ios/App || true
-      - name: Sync iOS
+          rm -rf ios
+          npx cap add ios
+      - name: Sync iOS and Plugins
         run: npx cap sync ios
-      - name: List Directory for Debugging
-        run: ls -la ios/App || true
+      - name: Verify Podfile Exists
+        run: |
+          if [ -f "ios/App/Podfile" ]; then
+            echo "Podfile found successfully!"
+          else
+            echo "Error: Podfile not found!"
+            exit 1
+          fi
       - name: Install CocoaPods
         run: |
           cd ios/App
