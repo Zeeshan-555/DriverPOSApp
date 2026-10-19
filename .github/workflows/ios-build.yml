@@ -1,8 +1,10 @@
 name: Build iOS App
 on: [push]
+
 jobs:
   build-ios:
     runs-on: macos-latest
+
     steps:
       - uses: actions/checkout@v4
 
@@ -19,8 +21,12 @@ jobs:
       - name: Re-create and Sync iOS Platform
         run: |
           rm -rf ios
-          npx cap add ios
+          npx cap add ios --packagemanager CocoaPods
           npx cap sync ios
+          echo "---- Capacitor version ----"
+          npx cap --version
+          echo "---- ios/App contents ----"
+          ls -la ios/App
 
       - name: Install CocoaPods
         run: |
