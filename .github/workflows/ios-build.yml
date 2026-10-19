@@ -11,8 +11,10 @@ jobs:
       - run: npm install
       - name: Ensure Web Assets Directory Exists
         run: mkdir -p www dist
-      - name: Add iOS Platform
-        run: npx cap add ios || true
+      - name: Re-create iOS Platform
+        run: |
+          rm -rf ios
+          npx cap add ios
       - name: Sync Capacitor iOS
         run: npx cap sync ios
       - name: Install CocoaPods
