@@ -9,6 +9,7 @@ jobs:
         with:
           node-version: '22'
       - run: npm install
+      - run: npx cap add ios || true
       - run: npx cap sync ios
       - name: Build iOS App
         run: |
